@@ -3,18 +3,17 @@ package d2scene
 import (
 	"image/color"
 
-	"github.com/OpenDiablo2/D2Shared/d2helper"
-
-	"github.com/OpenDiablo2/OpenDiablo2/d2render/d2mapengine"
-
 	"github.com/OpenDiablo2/D2Shared/d2common/d2enum"
 	"github.com/OpenDiablo2/D2Shared/d2common/d2interface"
 	"github.com/OpenDiablo2/D2Shared/d2common/d2resource"
 	"github.com/OpenDiablo2/D2Shared/d2data/d2datadict"
+	"github.com/OpenDiablo2/D2Shared/d2data/d2dc6"
+	"github.com/OpenDiablo2/D2Shared/d2helper"
 	"github.com/OpenDiablo2/OpenDiablo2/d2audio"
 	"github.com/OpenDiablo2/OpenDiablo2/d2core"
 	"github.com/OpenDiablo2/OpenDiablo2/d2corecommon/d2coreinterface"
 	"github.com/OpenDiablo2/OpenDiablo2/d2render"
+	"github.com/OpenDiablo2/OpenDiablo2/d2render/d2mapengine"
 	"github.com/OpenDiablo2/OpenDiablo2/d2render/d2ui"
 	"github.com/hajimehoshi/ebiten"
 )
@@ -51,14 +50,16 @@ func CreateGame(
 func (v *Game) Load() []func() {
 	return []func(){
 		func() {
-			v.pentSpinLeft = d2render.CreateSprite(v.fileProvider.LoadFile(d2resource.PentSpin), d2datadict.Palettes[d2enum.Sky])
+			dc6, _ := d2dc6.LoadDC6(v.fileProvider.LoadFile(d2resource.PentSpin), d2datadict.Palettes[d2enum.Sky])
+			v.pentSpinLeft = d2render.CreateSpriteFromDC6(dc6)
 			v.pentSpinLeft.Animate = true
 			v.pentSpinLeft.AnimateBackwards = true
 			v.pentSpinLeft.SpecialFrameTime = 475
 			v.pentSpinLeft.MoveTo(100, 300)
 		},
 		func() {
-			v.pentSpinRight = d2render.CreateSprite(v.fileProvider.LoadFile(d2resource.PentSpin), d2datadict.Palettes[d2enum.Sky])
+			dc6, _ := d2dc6.LoadDC6(v.fileProvider.LoadFile(d2resource.PentSpin), d2datadict.Palettes[d2enum.Sky])
+			v.pentSpinRight = d2render.CreateSpriteFromDC6(dc6)
 			v.pentSpinRight.Animate = true
 			v.pentSpinRight.SpecialFrameTime = 475
 			v.pentSpinRight.MoveTo(650, 300)
@@ -73,9 +74,10 @@ func (v *Game) Load() []func() {
 			v.mapEngine = d2mapengine.CreateMapEngine(v.gameState, v.soundManager, v.fileProvider)
 			// TODO: This needs to be different depending on the act of the player
 			v.mapEngine.GenerateMap(d2enum.RegionAct1Town, 1, 0)
-			region := v.mapEngine.GetRegion(0)
-			rx, ry := d2helper.IsoToScreen(int(region.Region.StartX), int(region.Region.StartY), 0, 0)
-			v.mapEngine.CenterCameraOn(float64(rx), float64(ry))
+			v.mapEngine.SetRegion(0)
+			region := v.mapEngine.Region()
+			rx, ry := d2helper.IsoToScreen(region.Region.StartX, region.Region.StartY, 0, 0)
+			v.mapEngine.CenterCameraOn(rx, ry)
 			v.mapEngine.Hero = d2core.CreateHero(
 				int32((region.Region.StartX*5)+3),
 				int32((region.Region.StartY*5)+3),
@@ -98,23 +100,39 @@ func (v Game) Render(screen *ebiten.Image) {
 
 func (v *Game) Update(tickTime float64) {
 	// TODO: Pathfinding
-	if ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) {
-		mx, my := ebiten.CursorPosition()
-		px, py := d2helper.ScreenToIso(float64(mx)-v.mapEngine.OffsetX, float64(my)-v.mapEngine.OffsetY)
-		angle := 359 - d2helper.GetAngleBetween(
-			v.mapEngine.Hero.AnimatedEntity.LocationX,
-			v.mapEngine.Hero.AnimatedEntity.LocationY,
-			px,
-			py,
-		)
 
-		directionIndex := int((float64(angle) / 360.0) * 16.0)
-		newDirection := d2render.DirectionLookup[directionIndex]
-		if newDirection != v.mapEngine.Hero.AnimatedEntity.GetDirection() {
-			v.mapEngine.Hero.AnimatedEntity.SetMode(d2enum.AnimationModePlayerTownNeutral.String(), v.mapEngine.Hero.Equipment.RightHand.GetWeaponClass(), newDirection)
-		}
+	if v.mapEngine.Hero.AnimatedEntity.LocationX != v.mapEngine.Hero.AnimatedEntity.TargetX ||
+		v.mapEngine.Hero.AnimatedEntity.LocationY != v.mapEngine.Hero.AnimatedEntity.TargetY {
+		v.mapEngine.Hero.AnimatedEntity.Step(tickTime)
 	}
 
-	rx, ry := d2helper.IsoToScreen(int(v.mapEngine.Hero.AnimatedEntity.LocationX), int(v.mapEngine.Hero.AnimatedEntity.LocationY), 0, 0)
-	v.mapEngine.CenterCameraOn(float64(rx), float64(ry))
+	for _, npc := range v.mapEngine.Region().Region.NPCs {
+
+		if npc.HasPaths &&
+			npc.AnimatedEntity.LocationX == npc.AnimatedEntity.TargetX &&
+			npc.AnimatedEntity.LocationY == npc.AnimatedEntity.TargetY &&
+			npc.AnimatedEntity.Wait() {
+			// If at the target, set target to the next path.
+			path := npc.NextPath()
+			npc.AnimatedEntity.SetTarget(
+				float64(path.X),
+				float64(path.Y),
+				path.Action,
+			)
+		}
+
+		if npc.AnimatedEntity.LocationX != npc.AnimatedEntity.TargetX ||
+			npc.AnimatedEntity.LocationY != npc.AnimatedEntity.TargetY {
+			npc.AnimatedEntity.Step(tickTime)
+		}
+
+	}
+
+	if ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) {
+		px, py := v.mapEngine.ScreenToIso(ebiten.CursorPosition())
+		v.mapEngine.Hero.AnimatedEntity.SetTarget(px*5, py*5, 1)
+	}
+
+	rx, ry := d2helper.IsoToScreen(v.mapEngine.Hero.AnimatedEntity.LocationX/5, v.mapEngine.Hero.AnimatedEntity.LocationY/5, 0, 0)
+	v.mapEngine.CenterCameraOn(rx, ry)
 }

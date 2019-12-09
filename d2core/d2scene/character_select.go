@@ -6,17 +6,19 @@ import (
 	"os"
 	"strings"
 
+	"github.com/OpenDiablo2/D2Shared/d2data/d2dc6"
+
 	"github.com/hajimehoshi/ebiten/ebitenutil"
 
-	"github.com/OpenDiablo2/OpenDiablo2/d2audio"
 	"github.com/OpenDiablo2/D2Shared/d2common"
 	"github.com/OpenDiablo2/D2Shared/d2common/d2enum"
 	"github.com/OpenDiablo2/D2Shared/d2common/d2interface"
-	"github.com/OpenDiablo2/OpenDiablo2/d2corecommon/d2coreinterface"
 	"github.com/OpenDiablo2/D2Shared/d2common/d2resource"
-	"github.com/OpenDiablo2/OpenDiablo2/d2core"
 	"github.com/OpenDiablo2/D2Shared/d2data/d2datadict"
 	dh "github.com/OpenDiablo2/D2Shared/d2helper"
+	"github.com/OpenDiablo2/OpenDiablo2/d2audio"
+	"github.com/OpenDiablo2/OpenDiablo2/d2core"
+	"github.com/OpenDiablo2/OpenDiablo2/d2corecommon/d2coreinterface"
 	"github.com/OpenDiablo2/OpenDiablo2/d2render"
 	"github.com/OpenDiablo2/OpenDiablo2/d2render/d2ui"
 	"github.com/hajimehoshi/ebiten"
@@ -70,7 +72,8 @@ func (v *CharacterSelect) Load() []func() {
 	v.soundManager.PlayBGM(d2resource.BGMTitle)
 	return []func(){
 		func() {
-			v.background = d2render.CreateSprite(v.fileProvider.LoadFile(d2resource.CharacterSelectionBackground), d2datadict.Palettes[d2enum.Sky])
+			dc6, _ := d2dc6.LoadDC6(v.fileProvider.LoadFile(d2resource.CharacterSelectionBackground), d2datadict.Palettes[d2enum.Sky])
+			v.background = d2render.CreateSpriteFromDC6(dc6)
 			v.background.MoveTo(0, 0)
 		},
 		func() {
@@ -130,11 +133,13 @@ func (v *CharacterSelect) Load() []func() {
 			v.deleteCharConfirmLabel.MoveTo(400, 185)
 		},
 		func() {
-			v.selectionBox = d2render.CreateSprite(v.fileProvider.LoadFile(d2resource.CharacterSelectionSelectBox), d2datadict.Palettes[d2enum.Sky])
+			dc6, _ := d2dc6.LoadDC6(v.fileProvider.LoadFile(d2resource.CharacterSelectionSelectBox), d2datadict.Palettes[d2enum.Sky])
+			v.selectionBox = d2render.CreateSpriteFromDC6(dc6)
 			v.selectionBox.MoveTo(37, 86)
 		},
 		func() {
-			v.okCancelBox = d2render.CreateSprite(v.fileProvider.LoadFile(d2resource.PopUpOkCancel), d2datadict.Palettes[d2enum.Fechar])
+			dc6, _ := d2dc6.LoadDC6(v.fileProvider.LoadFile(d2resource.PopUpOkCancel), d2datadict.Palettes[d2enum.Fechar])
+			v.okCancelBox = d2render.CreateSpriteFromDC6(dc6)
 			v.okCancelBox.MoveTo(270, 175)
 		},
 		func() {
@@ -185,7 +190,7 @@ func (v *CharacterSelect) updateCharacterBoxes() {
 		v.characterImage[i] = d2core.CreateHero(
 			0,
 			0,
-			5,
+			0,
 			v.gameStates[idx].HeroType,
 			d2core.HeroObjects[v.gameStates[idx].HeroType],
 			v.fileProvider,
